@@ -1,0 +1,91 @@
+name: CI/CD Deploy (Kind)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-backend:${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt -r app/requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          pytest -q
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}
+
+      - name: Install kind
+        run: |
+          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64"
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Create kind cluster
+        run: |
+          kind create cluster --name devops-challenge
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Apply namespace
+        run: kubectl apply -f k8s/namespace.yaml
+
+      - name: Apply secret
+        run: kubectl apply -f k8s/secret.yaml
+
+      - name: Deploy Postgres
+        run: kubectl apply -f k8s/postgres.yaml
+
+      - name: Wait for postgres pod
+        run: |
+          kubectl wait --for=condition=ready pod -l app=postgres -n devops-demo --timeout=120s
+
+      - name: Deploy backend with built image
+        run: |
+          # Replace placeholder image reference in manifest with the CI-built image
+          sed "s|YOUR_DOCKERHUB_USERNAME/devops-backend:latest|${{ env.IMAGE }}|g" k8s/backend.yaml > /tmp/backend.yaml
+          kubectl apply -f /tmp/backend.yaml
+
+      - name: Wait for backend rollout
+        run: kubectl rollout status deployment/backend -n devops-demo --timeout=120s
+
+      - name: Show deployed resources
+        run: kubectl get all -n devops-demo -o wide
+
+      - name: Smoke test /health
+        run: |
+          # Port-forward the service briefly and run a curl smoke test
+          kubectl port-forward svc/backend 8080:80 -n devops-demo &
+          sleep 2
+          curl -f http://127.0.0.1:8080/health
