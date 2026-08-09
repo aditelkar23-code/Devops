@@ -9,7 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-backend:${{ github.sha }}
-      PYTHONPATH: .
 
     steps:
       - name: Checkout
@@ -26,8 +25,15 @@ jobs:
           pip install -r app/requirements.txt -r app/requirements-dev.txt
 
       - name: Run tests
+        working-directory: ${{ github.workspace }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          pytest -q
+          pwd
+          ls -la
+          ls -la app
+          python -c "import sys; print(sys.path); import app; print(app.__file__)"
+          python -m pytest -q
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
