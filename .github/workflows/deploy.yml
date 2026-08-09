@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-backend:${{ github.sha }}
+      PYTHONPATH: .
 
     steps:
       - name: Checkout
