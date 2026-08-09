@@ -4,3 +4,9 @@ metadata:
   name: devops-demo
   labels:
     name: devops-demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: devops-demo
