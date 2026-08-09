@@ -76,7 +76,7 @@ jobs:
 
       - name: Wait for postgres pod
         run: |
-          kubectl wait --for=condition=ready pod -l app=postgres -n devops-demo --timeout=120s
+          kubectl wait --for=condition=ready pod/postgres -n devops-demo --timeout=120s
 
       - name: Deploy backend with built image
         run: |
